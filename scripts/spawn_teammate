@@ -1,0 +1,181 @@
+#!/bin/bash
+# spawn_teammate — Spawn a Claude Code agent in a named tmux window
+#
+# Usage:
+#   spawn_teammate <name> <dir> [options]
+#
+# Options:
+#   --model opus|sonnet|haiku    Model to use (default: sonnet)
+#   --lifecycle ephemeral|persistent  (default: ephemeral)
+#   --task "initial task"        Send this as the first message
+#   --worktree                   Create a git worktree for file isolation
+#   --type coder                 Add PR workflow and git rules to injection
+#
+# The tmux window list is the agent registry — no daemon required.
+
+set -e
+
+# Resolve plugin root for templates/scripts
+ORCHESTRATOR_HOME="${TMUX_ORCHESTRATOR_HOME:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
+
+NAME="$1"
+shift || true
+
+MODEL="sonnet"
+LIFECYCLE="ephemeral"
+TASK_DESC=""
+AGENT_TYPE="base"
+USE_WORKTREE=false
+DIR=""
+
+# Parse args
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --model)      MODEL="$2";     shift 2 ;;
+    --task)       TASK_DESC="$2"; shift 2 ;;
+    --lifecycle)  LIFECYCLE="$2"; shift 2 ;;
+    --type)       AGENT_TYPE="$2"; shift 2 ;;
+    --worktree)   USE_WORKTREE=true; shift ;;
+    *)
+      if [ -z "$DIR" ]; then DIR="$1"; fi
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$NAME" ] || [ -z "$DIR" ]; then
+  echo "Usage: spawn_teammate <name> <dir> [--model M] [--lifecycle L] [--task T] [--worktree] [--type coder]"
+  echo ""
+  echo "Models:     opus (complex), sonnet (default), haiku (simple)"
+  echo "Lifecycles: ephemeral (default), persistent"
+  exit 1
+fi
+
+if [ ! -d "$DIR" ]; then
+  echo "ERROR: directory $DIR does not exist"
+  exit 1
+fi
+
+# Detect current tmux session
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not running inside tmux. Set TMUX_ORCHESTRATOR_SESSION or run from within a tmux session."
+  exit 1
+fi
+
+# Check tmux session exists
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "ERROR: tmux session '$SESSION' does not exist"
+  exit 1
+fi
+
+# Prevent duplicate agent names
+if tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^${NAME}$"; then
+  echo "ERROR: agent '$NAME' already exists in session '$SESSION'. Kill it first: kill_teammate $NAME"
+  exit 1
+fi
+
+# Set up target directory (with optional worktree)
+TARGET_DIR="$DIR"
+WT_CREATED=false
+
+if [ "$USE_WORKTREE" = true ]; then
+  WT_DIR="/tmp/tmux-orchestrator-wt-${NAME}"
+  if [ -d "$WT_DIR" ]; then
+    echo "Worktree already exists at $WT_DIR — reusing"
+  else
+    BRANCH="agent/${NAME}"
+    cd "$DIR"
+    git worktree add "$WT_DIR" -b "$BRANCH" HEAD 2>/dev/null || \
+      git worktree add "$WT_DIR" "$BRANCH" 2>/dev/null || {
+        echo "ERROR: Failed to create git worktree at $WT_DIR"
+        echo "       Is $DIR a git repository?"
+        exit 1
+      }
+    echo "Created worktree: $WT_DIR (branch: $BRANCH)"
+  fi
+  TARGET_DIR="$WT_DIR"
+  WT_CREATED=true
+fi
+
+# CLAUDE.md injection for ephemeral agents
+if [ "$LIFECYCLE" = "ephemeral" ]; then
+  TARGET_CLAUDE="$TARGET_DIR/CLAUDE.md"
+
+  if [ "$AGENT_TYPE" = "coder" ]; then
+    TEMPLATE="$ORCHESTRATOR_HOME/templates/coder-claude-md.md"
+  else
+    TEMPLATE="$ORCHESTRATOR_HOME/templates/ephemeral-base.md"
+  fi
+
+  if [ -f "$TEMPLATE" ]; then
+    if [ -f "$TARGET_CLAUDE" ]; then
+      cp "$TARGET_CLAUDE" "${TARGET_CLAUDE}.pre-coder-backup"
+      TEMP=$(mktemp)
+      cat "$TEMPLATE" > "$TEMP"
+      echo "" >> "$TEMP"
+      echo "# --- Original Project Instructions ---" >> "$TEMP"
+      echo "" >> "$TEMP"
+      cat "${TARGET_CLAUDE}.pre-coder-backup" >> "$TEMP"
+      mv "$TEMP" "$TARGET_CLAUDE"
+    else
+      cp "$TEMPLATE" "$TARGET_CLAUDE"
+      touch "${TARGET_CLAUDE}.pre-coder-backup.empty"
+    fi
+  fi
+
+  # Install pre-push hook for coder agents (blocks .mcp.json/CLAUDE.md from push)
+  if [ "$AGENT_TYPE" = "coder" ] && [ -e "$TARGET_DIR/.git" ] || [ -f "$TARGET_DIR/.git" ]; then
+    HOOK_TEMPLATE="$ORCHESTRATOR_HOME/templates/pre-push-hook.sh"
+    if [ -f "$HOOK_TEMPLATE" ]; then
+      if [ -f "$TARGET_DIR/.git" ]; then
+        GIT_DIR=$(sed 's/gitdir: //' "$TARGET_DIR/.git")
+        HOOKS_DIR="$GIT_DIR/hooks"
+      else
+        HOOKS_DIR="$TARGET_DIR/.git/hooks"
+      fi
+      mkdir -p "$HOOKS_DIR" 2>/dev/null || true
+      cp "$HOOK_TEMPLATE" "$HOOKS_DIR/pre-push"
+      chmod +x "$HOOKS_DIR/pre-push"
+    fi
+  fi
+fi
+
+# State file to track agent dir (used by kill_teammate to restore CLAUDE.md)
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/tmux-orchestrator/agents"
+mkdir -p "$STATE_DIR"
+echo "$TARGET_DIR" > "$STATE_DIR/$NAME.dir"
+
+# Record orchestrator window (the one that ran this script)
+ORCH_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "main")
+
+# Scripts path for agent
+SCRIPTS_PATH="$ORCHESTRATOR_HOME/scripts"
+
+# Launch the agent
+CLAUDE_CMD="claude --dangerously-skip-permissions --model $MODEL"
+
+tmux new-window -t "$SESSION" -n "$NAME" -c "$TARGET_DIR" \
+  "export AGENT_NAME='$NAME'; \
+   export ORCHESTRATOR_SESSION='$SESSION'; \
+   export ORCHESTRATOR_WINDOW='$ORCH_WINDOW'; \
+   export TMUX_ORCHESTRATOR_HOME='$ORCHESTRATOR_HOME'; \
+   export PATH=\"$SCRIPTS_PATH:\$PATH\"; \
+   $CLAUDE_CMD 2>&1; \
+   echo '[AGENT $NAME EXITED — press enter to close]'; read"
+
+# Allow Claude to start, then dismiss any initial prompts
+sleep 3
+tmux send-keys -t "$SESSION:$NAME" Enter
+
+# Send initial task if provided
+if [ -n "$TASK_DESC" ]; then
+  sleep 2
+  tmux send-keys -t "$SESSION:$NAME" -l "$TASK_DESC"
+  sleep 0.5
+  tmux send-keys -t "$SESSION:$NAME" Enter
+fi
+
+WT_NOTE=""
+[ "$WT_CREATED" = true ] && WT_NOTE=" (worktree: $TARGET_DIR)"
+echo "Spawned $NAME ($LIFECYCLE, $MODEL) in session '$SESSION'$WT_NOTE"

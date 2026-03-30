@@ -1,0 +1,71 @@
+#!/bin/bash
+# watch_agents — Scan agent panes for stuck permission prompts and auto-approve
+#
+# Usage: watch_agents [--auto-approve] [--notify-only]
+#   --auto-approve   Send Enter to approve stuck prompts (default)
+#   --notify-only    Report stuck agents without approving
+#
+# Designed to be called from a cron, heartbeat, or the Stop hook.
+# Excludes the current window (the orchestrator) from scanning.
+
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
+AUTO_APPROVE=true
+
+while [[ "$1" == --* ]]; do
+  case "$1" in
+    --notify-only)  AUTO_APPROVE=false ;;
+    --auto-approve) AUTO_APPROVE=true ;;
+  esac
+  shift
+done
+
+if [ -z "$SESSION" ]; then
+  # Silent exit when not in tmux (e.g., Stop hook runs in non-tmux context)
+  exit 0
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  exit 0
+fi
+
+# Patterns that indicate an agent is stuck waiting for approval
+STUCK_PATTERNS=(
+  "Do you want to proceed"
+  "Do you want to create"
+  "Yes, allow all"
+  "Esc to cancel"
+  "Yes, and always allow"
+  "1 MCP server nee"
+  "Do you want to"
+)
+
+STUCK_AGENTS=()
+
+# Current window — skip it (that's the orchestrator)
+CURRENT_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "")
+
+# Scan all windows except the current one
+while IFS= read -r WINDOW; do
+  [ "$WINDOW" = "$CURRENT_WINDOW" ] && continue
+
+  PANE_OUTPUT=$(tmux capture-pane -t "$SESSION:$WINDOW" -p -S -20 2>/dev/null)
+  [ -z "$PANE_OUTPUT" ] && continue
+
+  for PATTERN in "${STUCK_PATTERNS[@]}"; do
+    if echo "$PANE_OUTPUT" | grep -q "$PATTERN"; then
+      STUCK_AGENTS+=("$WINDOW")
+      if [ "$AUTO_APPROVE" = true ]; then
+        tmux send-keys -t "$SESSION:$WINDOW" Enter
+        echo "[$(date '+%H:%M:%S')] AUTO-APPROVED: $WINDOW (matched: $PATTERN)"
+        sleep 0.5
+      else
+        echo "[$(date '+%H:%M:%S')] STUCK: $WINDOW (waiting on: $PATTERN)"
+      fi
+      break  # Only handle once per agent
+    fi
+  done
+done < <(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null)
+
+if [ ${#STUCK_AGENTS[@]} -eq 0 ]; then
+  echo "[$(date '+%H:%M:%S')] All agents clear — no permission prompts detected."
+fi

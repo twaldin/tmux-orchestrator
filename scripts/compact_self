@@ -1,0 +1,48 @@
+#!/bin/bash
+# compact_self — Agent self-compaction: clear context and resume from handoff
+#
+# Usage: compact_self [handoff_file] [resume_prompt]
+#
+# Called by a persistent agent when its context is getting full (>60%).
+# The agent writes state to a handoff file first, then calls this script.
+#
+# IMPORTANT: Must be called via Bash tool with run_in_background: true
+# so it executes AFTER the agent's current response completes.
+#
+# Flow:
+#   1. Agent detects context >60% (or heartbeat reminds it)
+#   2. Agent writes state to state.md
+#   3. Agent calls: compact_self state.md "Read state.md and resume."
+#   4. Script waits for response to finish, sends /clear, waits, sends resume prompt
+#   5. Fresh session reads handoff and continues
+
+set -e
+
+SESSION=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null)
+
+if [ -z "$SESSION" ] || [ -z "$WINDOW" ]; then
+  echo "ERROR: Not running inside tmux. compact_self must run in an agent's tmux pane."
+  exit 1
+fi
+
+HANDOFF="${1:-state.md}"
+RESUME_PROMPT="${2:-Read $HANDOFF and resume where you left off. Check crons.md if it exists and recreate any crons.}"
+
+echo "compact_self: Compacting $WINDOW in session $SESSION"
+echo "compact_self: Handoff file: $HANDOFF"
+echo "compact_self: Sending /clear in 5 seconds..."
+
+sleep 5
+
+tmux send-keys -t "$SESSION:$WINDOW" "/clear" Enter
+
+echo "compact_self: /clear sent. Waiting 8 seconds for fresh session..."
+
+sleep 8
+
+tmux send-keys -t "$SESSION:$WINDOW" -l "$RESUME_PROMPT"
+sleep 0.5
+tmux send-keys -t "$SESSION:$WINDOW" Enter
+
+echo "compact_self: Resume prompt sent. Compaction complete."

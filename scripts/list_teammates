@@ -1,0 +1,51 @@
+#!/bin/bash
+# list_teammates — List all agent windows in the current session
+#
+# Usage: list_teammates
+#
+# The tmux window list IS the agent registry — no daemon required.
+# Shows window name, active state, and current foreground command.
+
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not running inside tmux. Set TMUX_ORCHESTRATOR_SESSION."
+  exit 1
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "ERROR: tmux session '$SESSION' does not exist"
+  exit 1
+fi
+
+# Current window (the orchestrator)
+CURRENT_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "")
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/tmux-orchestrator/agents"
+
+echo "=== tmux-orchestrator: $SESSION ==="
+echo ""
+printf "%-20s %-8s %-16s %s\n" "NAME" "ACTIVE" "COMMAND" "DIR"
+printf "%-20s %-8s %-16s %s\n" "----" "------" "-------" "---"
+
+tmux list-windows -t "$SESSION" -F '#{window_name}|#{window_active}|#{pane_current_command}|#{pane_current_path}' 2>/dev/null | \
+while IFS='|' read -r win_name win_active pane_cmd pane_path; do
+  # Mark current window
+  if [ "$win_name" = "$CURRENT_WINDOW" ]; then
+    active_flag="* (you)"
+  elif [ "$win_active" = "1" ]; then
+    active_flag="yes"
+  else
+    active_flag="no"
+  fi
+
+  # Look up tracked dir
+  tracked_dir=$(cat "$STATE_DIR/$win_name.dir" 2>/dev/null || echo "$pane_path")
+  # Shorten home dir
+  short_dir=$(echo "$tracked_dir" | sed "s|$HOME|~|")
+
+  printf "%-20s %-8s %-16s %s\n" "$win_name" "$active_flag" "$pane_cmd" "$short_dir"
+done
+
+echo ""
+TOTAL=$(tmux list-windows -t "$SESSION" 2>/dev/null | wc -l | tr -d ' ')
+echo "Total windows: $TOTAL"

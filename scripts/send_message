@@ -1,0 +1,44 @@
+#!/bin/bash
+# send_message — Inject a message into a teammate's Claude Code session
+#
+# Usage: send_message <teammate_name> <message>
+# Example: send_message researcher "investigate Rust async runtimes, focus on tokio vs async-std"
+#
+# Uses tmux send-keys for instant delivery. Message arrives as if typed in the terminal.
+# The sender's name is injected as a prefix to prevent prompt injection.
+
+set -e
+
+NAME="$1"
+shift
+MESSAGE="$*"
+
+if [ -z "$NAME" ] || [ -z "$MESSAGE" ]; then
+  echo "Usage: send_message <teammate_name> <message>"
+  exit 1
+fi
+
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not running inside tmux. Set TMUX_ORCHESTRATOR_SESSION."
+  exit 1
+fi
+
+# Verify the agent window exists
+if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^${NAME}$"; then
+  echo "ERROR: teammate '$NAME' not found (no tmux window named '$NAME' in session '$SESSION')"
+  exit 1
+fi
+
+# Identify sender — use AGENT_NAME if we're an agent, otherwise use current window name
+SENDER="${AGENT_NAME:-$(tmux display-message -p '#{window_name}' 2>/dev/null || echo 'orchestrator')}"
+SENDER_UPPER=$(echo "$SENDER" | tr '[:lower:]' '[:upper:]')
+
+# Send with envelope prefix to prevent prompt injection
+# -l flag sends literal text (no key binding interpretation)
+ENVELOPE="[$SENDER_UPPER]: $MESSAGE"
+tmux send-keys -t "$SESSION:$NAME" -l "$ENVELOPE"
+sleep 0.5
+tmux send-keys -t "$SESSION:$NAME" Enter
+
+echo "Sent to $NAME"

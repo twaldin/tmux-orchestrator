@@ -1,0 +1,82 @@
+#!/bin/bash
+# spawn_coder — Spawn a coder agent to fix a GitHub issue
+#
+# Usage: spawn_coder <issue_number> [--model opus|sonnet|haiku] [--dir <project_dir>]
+#
+# Fetches the issue from GitHub, creates a git worktree, and spawns a coder agent
+# with full context. The coder implements the fix, creates a PR, then exits.
+#
+# Required:
+#   PROJECT_DIR   — local path to the project repo (env var or --dir flag)
+#
+# Optional:
+#   PR_REVIEWER   — GitHub username to assign as reviewer
+
+set -e
+
+ORCHESTRATOR_HOME="${TMUX_ORCHESTRATOR_HOME:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
+
+ISSUE="$1"
+MODEL="sonnet"
+PROJECT_DIR="${PROJECT_DIR:-}"
+PR_REVIEWER="${PR_REVIEWER:-}"
+
+shift || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --model) MODEL="$2"; shift 2 ;;
+    --dir)   PROJECT_DIR="$2"; shift 2 ;;
+    *)       shift ;;
+  esac
+done
+
+if [ -z "$ISSUE" ]; then
+  echo "Usage: spawn_coder <issue_number> [--model opus|sonnet|haiku] [--dir <project_dir>]"
+  exit 1
+fi
+
+if [ -z "$PROJECT_DIR" ]; then
+  echo "ERROR: PROJECT_DIR not set. Pass --dir or set the PROJECT_DIR env var."
+  exit 1
+fi
+
+if [ ! -d "$PROJECT_DIR" ]; then
+  echo "ERROR: $PROJECT_DIR does not exist"
+  exit 1
+fi
+
+# Fetch issue details from GitHub
+ISSUE_TITLE=$(cd "$PROJECT_DIR" && gh issue view "$ISSUE" --json title -q '.title' 2>/dev/null || echo "")
+ISSUE_BODY=$(cd "$PROJECT_DIR" && gh issue view "$ISSUE" --json body -q '.body' 2>/dev/null || echo "")
+
+if [ -z "$ISSUE_TITLE" ]; then
+  echo "ERROR: Could not fetch issue #$ISSUE from $PROJECT_DIR"
+  exit 1
+fi
+
+echo "Spawning coder for issue #$ISSUE: $ISSUE_TITLE"
+
+AGENT_NAME="coder-${ISSUE}"
+
+REVIEWER_INSTRUCTION=""
+[ -n "$PR_REVIEWER" ] && REVIEWER_INSTRUCTION="Assign @$PR_REVIEWER as reviewer on the PR."
+
+TASK="Fix GitHub issue #${ISSUE}: ${ISSUE_TITLE}
+
+Issue description:
+${ISSUE_BODY}
+
+Use /gsd:fast for small fixes, or /gsd:plan-phase → /gsd:execute-phase for larger ones.
+Create PR with 'Fixes #${ISSUE}' in the description body.
+${REVIEWER_INSTRUCTION}
+
+When done: message_parent with PR URL and test count, then /exit."
+
+"$ORCHESTRATOR_HOME/scripts/spawn_teammate" "$AGENT_NAME" "$PROJECT_DIR" \
+  --model "$MODEL" \
+  --lifecycle ephemeral \
+  --type coder \
+  --worktree \
+  --task "$TASK"
+
+echo "Spawned $AGENT_NAME for issue #$ISSUE"

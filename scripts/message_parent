@@ -1,0 +1,43 @@
+#!/bin/bash
+# message_parent — Send a message to the orchestrator that spawned this agent
+#
+# Usage: message_parent <message>
+# Example: message_parent "Done. PR #42 created — 12 tests pass."
+#
+# Reads ORCHESTRATOR_SESSION and ORCHESTRATOR_WINDOW from the environment,
+# which are injected at spawn time by spawn_teammate.
+
+set -e
+
+MESSAGE="$*"
+
+if [ -z "$MESSAGE" ]; then
+  echo "Usage: message_parent <message>"
+  exit 1
+fi
+
+SESSION="${ORCHESTRATOR_SESSION:-}"
+WINDOW="${ORCHESTRATOR_WINDOW:-}"
+
+if [ -z "$SESSION" ] || [ -z "$WINDOW" ]; then
+  echo "ERROR: ORCHESTRATOR_SESSION and ORCHESTRATOR_WINDOW are not set."
+  echo "       These are injected by spawn_teammate. Are you running inside a spawned agent?"
+  exit 1
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "ERROR: orchestrator session '$SESSION' not found"
+  exit 1
+fi
+
+# Identify sender — use AGENT_NAME or derive from current dir
+SENDER="${AGENT_NAME:-$(basename "$PWD")}"
+SENDER_UPPER=$(echo "$SENDER" | tr '[:lower:]' '[:upper:]')
+
+# Envelope prefix prevents prompt injection
+ENVELOPE="[$SENDER_UPPER]: $MESSAGE"
+tmux send-keys -t "$SESSION:$WINDOW" -l "$ENVELOPE"
+sleep 0.5
+tmux send-keys -t "$SESSION:$WINDOW" Enter
+
+echo "Sent to orchestrator ($SESSION:$WINDOW)"

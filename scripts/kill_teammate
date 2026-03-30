@@ -1,0 +1,51 @@
+#!/bin/bash
+# kill_teammate — Stop a teammate agent and clean up
+#
+# Usage: kill_teammate <name>
+#
+# Restores any injected CLAUDE.md backup, removes the tmux window,
+# and cleans up the agent state file.
+
+set -e
+
+NAME="$1"
+
+if [ -z "$NAME" ]; then
+  echo "Usage: kill_teammate <name>"
+  exit 1
+fi
+
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not running inside tmux. Set TMUX_ORCHESTRATOR_SESSION."
+  exit 1
+fi
+
+# Look up agent directory from state file
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/tmux-orchestrator/agents"
+AGENT_DIR=$(cat "$STATE_DIR/$NAME.dir" 2>/dev/null || echo "")
+
+# Restore backed-up CLAUDE.md if we injected one
+if [ -n "$AGENT_DIR" ] && [ -d "$AGENT_DIR" ]; then
+  TARGET_CLAUDE="$AGENT_DIR/CLAUDE.md"
+  if [ -f "${TARGET_CLAUDE}.pre-coder-backup" ]; then
+    mv "${TARGET_CLAUDE}.pre-coder-backup" "$TARGET_CLAUDE"
+    echo "Restored CLAUDE.md in $AGENT_DIR"
+  elif [ -f "${TARGET_CLAUDE}.pre-coder-backup.empty" ]; then
+    rm -f "$TARGET_CLAUDE" "${TARGET_CLAUDE}.pre-coder-backup.empty"
+    echo "Removed injected CLAUDE.md from $AGENT_DIR"
+  fi
+fi
+
+# Kill the tmux window
+if tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^${NAME}$"; then
+  tmux kill-window -t "$SESSION:$NAME"
+  echo "Killed window '$NAME' in session '$SESSION'"
+else
+  echo "WARNING: no tmux window named '$NAME' in session '$SESSION'"
+fi
+
+# Remove state file
+rm -f "$STATE_DIR/$NAME.dir"
+
+echo "Done: $NAME cleaned up"
