@@ -1,26 +1,20 @@
 {
   "name": "tmux-orchestrator",
-  "displayName": "tmux Orchestrator",
-  "shortDescription": "Multi-agent teams in tmux windows. No frameworks — just bash.",
-  "longDescription": "Spawn Claude Code agents in isolated tmux windows with their own context, git worktrees, and task injection. Two-way communication via tmux send-keys. Auto-approve stuck permission prompts. Self-compacting persistent agents. The registry is the window list.",
-  "category": "productivity",
-  "tags": ["multi-agent", "tmux", "orchestration", "worktree", "automation"],
-  "skills": [
-    {
-      "name": "orchestrate",
-      "displayName": "Orchestrate",
-      "description": "Manage a team of Claude Code agents in tmux windows"
-    },
-    {
-      "name": "persistent",
-      "displayName": "Persistent Orchestrator",
-      "description": "Always-on orchestrator with self-compaction and task queues"
-    }
-  ],
-  "requirements": {
-    "tools": ["tmux", "bash"],
-    "optional": ["gh", "git"]
+  "owner": {
+    "name": "Tim Waldin",
+    "email": "timothy@waldin.net"
   },
-  "screenshots": [],
-  "repository": "https://github.com/twaldin/tmux-orchestrator"
+  "metadata": {
+    "description": "Multi-agent teams in tmux windows. No frameworks — just bash.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "tmux-orchestrator",
+      "source": "./",
+      "description": "Spawn Claude Code agents in isolated tmux windows with their own context, git worktrees, and task injection. Two-way communication via tmux send-keys.",
+      "category": "productivity",
+      "tags": ["multi-agent", "tmux", "orchestration", "worktree", "automation"]
+    }
+  ]
 }
