@@ -1,7 +1,10 @@
 #!/bin/bash
 # compact_self — Agent self-compaction: clear context and resume from handoff
 #
-# Usage: compact_self [handoff_file] [resume_prompt]
+# Usage:
+#   compact_self [state_file]                           # Resume from state file
+#   compact_self [state_file] --handoff "direct task"   # Resume with specific task
+#   compact_self [state_file] "custom resume prompt"    # Custom resume (legacy)
 #
 # Called by a persistent agent when its context is getting full (>60%).
 # The agent writes state to a handoff file first, then calls this script.
@@ -9,12 +12,9 @@
 # IMPORTANT: Must be called via Bash tool with run_in_background: true
 # so it executes AFTER the agent's current response completes.
 #
-# Flow:
-#   1. Agent detects context >60% (or heartbeat reminds it)
-#   2. Agent writes state to state.md
-#   3. Agent calls: compact_self state.md "Read state.md and resume."
-#   4. Script waits for response to finish, sends /clear, waits, sends resume prompt
-#   5. Fresh session reads handoff and continues
+# The --handoff flag passes a direct task to the next session. state.md is
+# "everything I know" but handoff is "what to do RIGHT NOW." The resume prompt
+# becomes: "Read state.md for full context. Your immediate task: [handoff]"
 
 set -e
 
@@ -26,11 +26,36 @@ if [ -z "$SESSION" ] || [ -z "$WINDOW" ]; then
   exit 1
 fi
 
-HANDOFF="${1:-state.md}"
-RESUME_PROMPT="${2:-Read $HANDOFF and resume where you left off. Check crons.md if it exists and recreate any crons.}"
+# Parse args
+HANDOFF=""
+RESUME_PROMPT=""
+STATE_FILE="${1:-state.md}"
+
+shift || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --handoff)
+      HANDOFF="$2"
+      shift 2
+      ;;
+    *)
+      # Legacy: positional resume prompt
+      RESUME_PROMPT="$1"
+      shift
+      ;;
+  esac
+done
+
+# Build resume prompt
+if [ -n "$HANDOFF" ]; then
+  RESUME_PROMPT="Read $STATE_FILE for full context. Recreate crons from crons.md if it exists. Your immediate task: $HANDOFF"
+elif [ -z "$RESUME_PROMPT" ]; then
+  RESUME_PROMPT="Read $STATE_FILE and resume where you left off. Check crons.md if it exists and recreate any crons."
+fi
 
 echo "compact_self: Compacting $WINDOW in session $SESSION"
-echo "compact_self: Handoff file: $HANDOFF"
+echo "compact_self: State file: $STATE_FILE"
+[ -n "$HANDOFF" ] && echo "compact_self: Handoff task: $HANDOFF"
 echo "compact_self: Sending /clear in 5 seconds..."
 
 sleep 5
