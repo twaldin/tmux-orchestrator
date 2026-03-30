@@ -1,0 +1,7 @@
+CLAUDE.md
+CLAUDE.md.pre-coder-backup*
+.mcp.json
+.claude/
+.planning/
+.playwright-mcp/
+node_modules/
