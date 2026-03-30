@@ -1,0 +1,19 @@
+{
+  "name": "tmux-orchestrator",
+  "version": "0.1.0",
+  "description": "Multi-agent teams for Claude Code. Spawn agents in isolated tmux windows with their own context, tools, and git worktrees. No frameworks — just bash and tmux.",
+  "author": {
+    "name": "Tim Waldin",
+    "email": "timothy@waldin.net"
+  },
+  "homepage": "https://github.com/twaldin/tmux-orchestrator",
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "tmux",
+    "orchestration",
+    "agent-teams",
+    "worktree",
+    "bash"
+  ]
+}
