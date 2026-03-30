@@ -1,0 +1,103 @@
+#!/bin/bash
+# reconcile_agents — Check tmux agent health and respawn dead persistent agents
+#
+# Usage: reconcile_agents [--fix]
+#   Without flags: report only (dry run)
+#   --fix: respawn dead persistent agents
+#
+# The tmux window list is the registry. If a persistent agent's window is gone,
+# it either crashed or its context was exhausted. This script detects that and
+# optionally respawns it.
+
+set -e
+
+ORCHESTRATOR_HOME="${TMUX_ORCHESTRATOR_HOME:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")}"
+FIX=false
+STATE_DIR="${TMUX_ORCHESTRATOR_STATE:-${HOME}/.local/state/tmux-orchestrator}"
+
+[ "$1" = "--fix" ] && FIX=true
+
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not inside a tmux session."
+  exit 1
+fi
+
+echo "=== Agent Reconciliation ==="
+echo ""
+
+ISSUES=0
+
+# Check all windows — are they running claude?
+echo "--- Active agents ---"
+WINDOWS=$(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null)
+ORCHESTRATOR_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null)
+
+for WINDOW in $WINDOWS; do
+  # Skip our own window
+  [ "$WINDOW" = "$ORCHESTRATOR_WINDOW" ] && continue
+
+  # Check if claude is running in the window
+  PANE_PID=$(tmux list-panes -t "$SESSION:$WINDOW" -F '#{pane_pid}' 2>/dev/null | head -1)
+  if [ -n "$PANE_PID" ]; then
+    # Check if any child process is claude
+    if ps -o command= -g "$PANE_PID" 2>/dev/null | grep -q "claude"; then
+      echo "OK: $WINDOW (claude running)"
+    else
+      # Check if the pane shows "[AGENT X EXITED]"
+      LAST_LINE=$(tmux capture-pane -t "$SESSION:$WINDOW" -p -S -3 2>/dev/null | tail -1)
+      if echo "$LAST_LINE" | grep -q "EXITED"; then
+        echo "DEAD: $WINDOW (exited)"
+        ((ISSUES++))
+      else
+        echo "UNKNOWN: $WINDOW (no claude process, checking...)"
+        ((ISSUES++))
+      fi
+    fi
+  else
+    echo "DEAD: $WINDOW (no pane)"
+    ((ISSUES++))
+  fi
+done
+
+# Check state dir for persistent agents that should be alive
+if [ -d "$STATE_DIR" ]; then
+  echo ""
+  echo "--- Persistent agent check ---"
+  for AGENT_DIR in "$STATE_DIR"/*/; do
+    [ -d "$AGENT_DIR" ] || continue
+    AGENT_NAME=$(basename "$AGENT_DIR")
+    LIFECYCLE=$(cat "$AGENT_DIR/lifecycle" 2>/dev/null || echo "unknown")
+
+    if [ "$LIFECYCLE" = "persistent" ]; then
+      # Check if window exists
+      if echo "$WINDOWS" | grep -q "^${AGENT_NAME}$"; then
+        echo "OK: $AGENT_NAME (persistent, window alive)"
+      else
+        echo "MISSING: $AGENT_NAME (persistent, window gone)"
+        ((ISSUES++))
+
+        if [ "$FIX" = true ]; then
+          AGENT_PATH=$(cat "$AGENT_DIR/directory" 2>/dev/null || echo "")
+          AGENT_MODEL=$(cat "$AGENT_DIR/model" 2>/dev/null || echo "sonnet")
+          if [ -n "$AGENT_PATH" ] && [ -d "$AGENT_PATH" ]; then
+            echo "  → Respawning $AGENT_NAME at $AGENT_PATH ($AGENT_MODEL)"
+            "$ORCHESTRATOR_HOME/scripts/spawn_teammate" "$AGENT_NAME" "$AGENT_PATH" \
+              --lifecycle persistent --model "$AGENT_MODEL" \
+              --task "Read state.md and resume where you left off. Recreate crons from crons.md." 2>/dev/null
+          else
+            echo "  → Cannot respawn: directory '$AGENT_PATH' not found"
+          fi
+        fi
+      fi
+    fi
+  done
+fi
+
+echo ""
+if [ "$ISSUES" -eq 0 ]; then
+  echo "All agents healthy."
+else
+  echo "$ISSUES issue(s) found."
+  [ "$FIX" = false ] && echo "Run with --fix to respawn dead persistent agents."
+fi

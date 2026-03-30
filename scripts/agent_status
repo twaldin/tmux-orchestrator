@@ -1,0 +1,56 @@
+#!/bin/bash
+# agent_status — Get context window usage and status for teammates
+#
+# Usage:
+#   agent_status              # All agents
+#   agent_status <name>       # Specific agent
+#
+# Reads the Claude Code status line from each agent's tmux pane.
+# Uses tmux window names as the registry — no daemon or registry file needed.
+
+SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null)}"
+ORCHESTRATOR_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null)
+TARGET="$1"
+
+if [ -z "$SESSION" ]; then
+  echo "ERROR: Not inside a tmux session."
+  exit 1
+fi
+
+echo "=== Agent Status ==="
+echo ""
+printf "%-20s %-8s %s\n" "NAME" "ALIVE" "STATUS LINE"
+printf "%-20s %-8s %s\n" "----" "-----" "-----------"
+
+WINDOWS=$(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null)
+
+for WINDOW in $WINDOWS; do
+  # Skip our own window
+  [ "$WINDOW" = "$ORCHESTRATOR_WINDOW" ] && continue
+  [ -n "$TARGET" ] && [ "$WINDOW" != "$TARGET" ] && continue
+
+  # Check if claude is running
+  ALIVE="no"
+  STATUS_LINE="(not running)"
+  PANE_PID=$(tmux list-panes -t "$SESSION:$WINDOW" -F '#{pane_pid}' 2>/dev/null | head -1)
+
+  if [ -n "$PANE_PID" ] && ps -o command= -g "$PANE_PID" 2>/dev/null | grep -q "claude"; then
+    ALIVE="yes"
+    # Capture the last 5 lines — status line is usually at the bottom
+    BOTTOM=$(tmux capture-pane -t "$SESSION:$WINDOW" -p -S -5 2>/dev/null)
+    # Look for context/token indicators
+    STATUS_LINE=$(echo "$BOTTOM" | grep -iE '(ctx|context|token|opus|sonnet|haiku|%|cost|●)' | tail -1)
+    if [ -z "$STATUS_LINE" ]; then
+      STATUS_LINE=$(echo "$BOTTOM" | grep -v '^$' | tail -1)
+    fi
+    STATUS_LINE=$(echo "$STATUS_LINE" | sed 's/^[[:space:]]*//' | cut -c1-80)
+  else
+    # Check for exit message
+    LAST=$(tmux capture-pane -t "$SESSION:$WINDOW" -p -S -3 2>/dev/null | tail -1)
+    if echo "$LAST" | grep -q "EXITED"; then
+      STATUS_LINE="(exited)"
+    fi
+  fi
+
+  printf "%-20s %-8s %s\n" "$WINDOW" "$ALIVE" "$STATUS_LINE"
+done
