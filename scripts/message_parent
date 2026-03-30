@@ -40,4 +40,7 @@ tmux send-keys -t "$SESSION:$WINDOW" -l "$ENVELOPE"
 sleep 0.5
 tmux send-keys -t "$SESSION:$WINDOW" Enter
 
+# Mark that we've messaged (used by completion-reminder hook)
+touch "/tmp/tmux-orchestrator-messaged-${AGENT_NAME:-unknown}"
+
 echo "Sent to orchestrator ($SESSION:$WINDOW)"

@@ -45,7 +45,8 @@ else
   echo "WARNING: no tmux window named '$NAME' in session '$SESSION'"
 fi
 
-# Remove state file
+# Remove state file and message flag
 rm -f "$STATE_DIR/$NAME.dir"
+rm -f "/tmp/tmux-orchestrator-messaged-${NAME}"
 
 echo "Done: $NAME cleaned up"

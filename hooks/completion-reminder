@@ -1,0 +1,22 @@
+#!/bin/bash
+# completion-reminder — Stop hook that reminds ephemeral agents to call message_parent
+#
+# Runs after every agent response. If this is an ephemeral agent that hasn't
+# called message_parent yet, injects a reminder into the conversation.
+#
+# Environment (set by spawn_teammate):
+#   AGENT_NAME — name of this agent
+#   ORCHESTRATOR_SESSION — parent tmux session
+#   ORCHESTRATOR_WINDOW — parent tmux window
+
+# Only run for spawned agents (AGENT_NAME is set by spawn_teammate)
+[ -z "$AGENT_NAME" ] && exit 0
+
+# Only run for ephemeral agents (persistent agents don't need to message_parent)
+[ -z "$ORCHESTRATOR_SESSION" ] && exit 0
+
+# Already messaged — nothing to do
+[ -f "/tmp/tmux-orchestrator-messaged-${AGENT_NAME}" ] && exit 0
+
+# Inject reminder into the conversation via systemMessage
+echo '{"systemMessage":"REMINDER: You have NOT called message_parent yet. When your task is complete, you MUST run: message_parent \"summary of what you did\" — then /exit. The orchestrator cannot see your work without this."}'
