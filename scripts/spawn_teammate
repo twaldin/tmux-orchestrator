@@ -124,20 +124,14 @@ if [ "$LIFECYCLE" = "ephemeral" ]; then
     fi
   fi
 
-  # Install pre-push hook for coder agents (blocks .mcp.json/CLAUDE.md from push)
-  if [ "$AGENT_TYPE" = "coder" ] && [ -e "$TARGET_DIR/.git" ] || [ -f "$TARGET_DIR/.git" ]; then
-    HOOK_TEMPLATE="$ORCHESTRATOR_HOME/templates/pre-push-hook.sh"
-    if [ -f "$HOOK_TEMPLATE" ]; then
-      if [ -f "$TARGET_DIR/.git" ]; then
-        GIT_DIR=$(sed 's/gitdir: //' "$TARGET_DIR/.git")
-        HOOKS_DIR="$GIT_DIR/hooks"
-      else
-        HOOKS_DIR="$TARGET_DIR/.git/hooks"
+  # Add CLAUDE.md and .mcp.json to .gitignore (prevents accidental commits — safer than pre-push hook)
+  if [ -e "$TARGET_DIR/.git" ] || [ -f "$TARGET_DIR/.git" ]; then
+    GITIGNORE="$TARGET_DIR/.gitignore"
+    for BLOCKED in "CLAUDE.md" ".mcp.json" "CLAUDE.md.pre-coder-backup" "CLAUDE.md.pre-coder-backup.empty"; do
+      if ! grep -qxF "$BLOCKED" "$GITIGNORE" 2>/dev/null; then
+        echo "$BLOCKED" >> "$GITIGNORE"
       fi
-      mkdir -p "$HOOKS_DIR" 2>/dev/null || true
-      cp "$HOOK_TEMPLATE" "$HOOKS_DIR/pre-push"
-      chmod +x "$HOOKS_DIR/pre-push"
-    fi
+    done
   fi
 fi
 
