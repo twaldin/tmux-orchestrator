@@ -20,4 +20,4 @@
 [ -f "/tmp/tmux-orchestrator-messaged-${AGENT_NAME}" ] && exit 0
 
 # Inject reminder into the conversation via systemMessage
-echo '{"systemMessage":"REMINDER: You have NOT called message_parent yet. When your task is complete, you MUST run: message_parent \"summary of what you did\" — then /exit. The orchestrator cannot see your work without this."}'
+echo '{"systemMessage":"REMINDER: Run message_parent \"summary\" when done. The orchestrator will handle cleanup."}'
