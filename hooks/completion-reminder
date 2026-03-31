@@ -13,6 +13,7 @@
 [ -z "$AGENT_NAME" ] && exit 0
 
 # Only run for ephemeral agents (persistent agents don't need to message_parent)
+[ "$AGENT_LIFECYCLE" = "persistent" ] && exit 0
 [ -z "$ORCHESTRATOR_SESSION" ] && exit 0
 
 # Already messaged — nothing to do

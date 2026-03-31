@@ -175,6 +175,7 @@ CLAUDE_CMD="claude --dangerously-skip-permissions --model $MODEL"
 
 tmux new-window -t "$SESSION" -n "$NAME" -c "$TARGET_DIR" \
   "export AGENT_NAME='$NAME'; \
+   export AGENT_LIFECYCLE='$LIFECYCLE'; \
    export ORCHESTRATOR_SESSION='$SESSION'; \
    export ORCHESTRATOR_WINDOW='$ORCH_WINDOW'; \
    export TMUX_ORCHESTRATOR_HOME='$ORCHESTRATOR_HOME'; \
