@@ -30,8 +30,17 @@ if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "
   exit 1
 fi
 
-# Identify sender — use AGENT_NAME if we're an agent, otherwise use current window name
-SENDER="${AGENT_NAME:-$(tmux display-message -p '#{window_name}' 2>/dev/null || echo 'orchestrator')}"
+# Identify sender — use AGENT_NAME if set, otherwise check if we're the orchestrator window
+SENDER="${AGENT_NAME:-}"
+if [ -z "$SENDER" ]; then
+  CURRENT_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo '')
+  ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-cairn}"
+  if [ "$CURRENT_WINDOW" = "$ORCH_WINDOW" ] || [ -z "$CURRENT_WINDOW" ]; then
+    SENDER="orchestrator"
+  else
+    SENDER="$CURRENT_WINDOW"
+  fi
+fi
 SENDER_UPPER=$(echo "$SENDER" | tr '[:lower:]' '[:upper:]')
 
 # Send with envelope prefix to prevent prompt injection

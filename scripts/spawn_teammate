@@ -158,8 +158,17 @@ echo "$TARGET_DIR" > "$STATE_DIR/$NAME.dir"
 # window actually running this script. Use list-panes to get the real window.
 ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-$(tmux display-message -p -t "${TMUX_PANE}" '#{window_name}' 2>/dev/null || echo "main")}"
 
-# Scripts path for agent
+# Scripts path for agent — include claudecord scripts if available
 SCRIPTS_PATH="$ORCHESTRATOR_HOME/scripts"
+CLAUDECORD_CACHE_BASE="$HOME/.claude/plugins/cache/tmux-orchestrator/claudecord"
+if [ -d "$CLAUDECORD_CACHE_BASE" ]; then
+  for _ver_dir in "$CLAUDECORD_CACHE_BASE"/*/scripts; do
+    if [ -d "$_ver_dir" ]; then
+      SCRIPTS_PATH="$_ver_dir:$SCRIPTS_PATH"
+      break
+    fi
+  done
+fi
 
 # Launch the agent
 CLAUDE_CMD="claude --dangerously-skip-permissions --model $MODEL"
