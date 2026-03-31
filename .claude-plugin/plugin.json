@@ -7,8 +7,8 @@
     "email": "timothy@waldin.net"
   },
   "commands": [
-    "./skills/orchestrate/SKILL.md",
-    "./skills/persistent/SKILL.md"
+    "./skills/orchestrate/orchestrate.md",
+    "./skills/persistent/persistent.md"
   ],
   "homepage": "https://github.com/twaldin/tmux-orchestrator",
   "license": "MIT",
