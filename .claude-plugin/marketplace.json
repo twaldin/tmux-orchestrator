@@ -5,7 +5,7 @@
     "email": "timothy@waldin.net"
   },
   "metadata": {
-    "description": "Multi-agent teams in tmux windows. No frameworks — just bash.",
+    "description": "Multi-agent orchestration tools for Claude Code.",
     "version": "0.1.0"
   },
   "plugins": [
@@ -15,6 +15,17 @@
       "description": "Spawn Claude Code agents in isolated tmux windows with their own context, git worktrees, and task injection. Two-way communication via tmux send-keys.",
       "category": "productivity",
       "tags": ["multi-agent", "tmux", "orchestration", "worktree", "automation"]
+    },
+    {
+      "name": "claudecord",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/twaldin/claudecord.git"
+      },
+      "description": "Discord-based agent communication. Per-agent channels, status boards, and phone-accessible orchestration. Requires tmux-orchestrator.",
+      "category": "communication",
+      "tags": ["discord", "agents", "communication", "channels", "mobile"],
+      "dependencies": ["tmux-orchestrator"]
     }
   ]
 }
