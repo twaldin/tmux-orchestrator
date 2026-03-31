@@ -1,6 +1,4 @@
 #!/bin/bash
-# hooks/session-start — minimal context injection on session boot
-# Just announces availability. Does NOT inject orchestration mode automatically.
-cat <<'EOF'
-{"hookSpecificOutput":{"additionalContext":"tmux-orchestrator is installed. Agent management scripts are available at ${CLAUDE_PLUGIN_ROOT}/scripts/. Use /tmux-orchestrator:orchestrate to manage a team of Claude Code agents in tmux windows."}}
-EOF
+# hooks/session-start — silent. No output needed.
+# The plugin's skills and scripts are automatically available.
+exit 0
