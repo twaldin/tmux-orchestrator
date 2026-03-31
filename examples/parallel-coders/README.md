@@ -30,7 +30,7 @@ kill_teammate coder-101
 Each `spawn_coder` call:
 1. Creates a git worktree (`/tmp/tmux-orchestrator-wt-coder-<N>`) on a new branch `agent/coder-<N>`
 2. Prepends the coder CLAUDE.md template to the project's CLAUDE.md
-3. Installs a pre-push hook that blocks `.mcp.json` and `CLAUDE.md` from being pushed
+3. Adds `CLAUDE.md` and `.mcp.json` to `.gitignore` in the worktree to prevent accidental commits
 4. Launches `claude --dangerously-skip-permissions` in a new tmux window
 5. Sends the issue context as the first message
 

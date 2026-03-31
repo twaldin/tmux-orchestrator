@@ -34,7 +34,8 @@ fi
 SENDER="${AGENT_NAME:-}"
 if [ -z "$SENDER" ]; then
   CURRENT_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo '')
-  ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-cairn}"
+  # Auto-detect orchestrator window: use ORCHESTRATOR_WINDOW if set, otherwise use CURRENT_WINDOW, fallback to "main"
+  ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-${CURRENT_WINDOW:-main}}"
   if [ "$CURRENT_WINDOW" = "$ORCH_WINDOW" ] || [ -z "$CURRENT_WINDOW" ]; then
     SENDER="orchestrator"
   else

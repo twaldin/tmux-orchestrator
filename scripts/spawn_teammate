@@ -154,9 +154,8 @@ echo "$TARGET_DIR" > "$STATE_DIR/$NAME.dir"
 
 # Record orchestrator window (the one that ran this script)
 # Use explicit ORCHESTRATOR_WINDOW if set, otherwise detect from current pane's window
-# tmux display-message returns the CLIENT's active window which may differ from the
-# window actually running this script. Use list-panes to get the real window.
-ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-$(tmux display-message -p -t "${TMUX_PANE}" '#{window_name}' 2>/dev/null || echo "main")}"
+# Try TMUX_PANE first (most reliable), then fall back to detecting active window dynamically
+ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-$(tmux display-message -p -t "${TMUX_PANE:-}" '#{window_name}' 2>/dev/null || tmux display-message -p '#{window_name}' 2>/dev/null || echo "main")}"
 
 # Scripts path for agent — include claudecord scripts if available
 SCRIPTS_PATH="$ORCHESTRATOR_HOME/scripts"

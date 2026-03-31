@@ -7,7 +7,7 @@ A Claude Code plugin for managing multi-agent teams in tmux. Spawn Claude Code a
 ## What You Get
 
 - **Two skills:** `/tmux-orchestrator:orchestrate` (reactive management) and `/tmux-orchestrator:persistent` (always-on orchestrator)
-- **Eight scripts:** spawn, kill, message, list, watch, compact — all bash, all tmux
+- **Scripts:** spawn, kill, message, list, watch, compact, reconcile — all bash, all tmux
 - **Agent templates:** ephemeral, coder, persistent, researcher
 - **CLAUDE.md injection:** coders get task context and completion protocols baked in
 - **Worktree isolation:** each coder gets its own branch — no merge conflicts during parallel work
@@ -48,6 +48,8 @@ export TMUX_ORCHESTRATOR_HOME="$HOME/tmux-orchestrator"
 export PATH="$TMUX_ORCHESTRATOR_HOME/scripts:$PATH"
 ```
 
+Note: standalone mode only adds the scripts to PATH. The hooks (auto-approval on Stop, completion reminder) and slash commands won't be active unless you also add the plugin to `settings.json` as shown above.
+
 ## Requirements
 
 - tmux
@@ -86,6 +88,9 @@ All scripts live in `scripts/` and are added to spawned agents' PATH automatical
 | `watch_agents` | Auto-approve stuck permission prompts |
 | `compact_self` | Agent self-compaction: write state, /clear, resume |
 | `spawn_coder` | Convenience: worktree + GitHub issue context |
+| `agent_status` | Show context window usage and liveness for all agents |
+| `capture_pane` | Capture recent output from an agent's pane |
+| `reconcile_agents` | Detect dead agents; `--fix` respawns dead persistent agents |
 
 ### spawn_teammate
 

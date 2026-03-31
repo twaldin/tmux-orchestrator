@@ -48,15 +48,15 @@ for WINDOW in $WINDOWS; do
       LAST_LINE=$(tmux capture-pane -t "$SESSION:$WINDOW" -p -S -3 2>/dev/null | tail -1)
       if echo "$LAST_LINE" | grep -q "EXITED"; then
         echo "DEAD: $WINDOW (exited)"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
       else
         echo "UNKNOWN: $WINDOW (no claude process, checking...)"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
       fi
     fi
   else
     echo "DEAD: $WINDOW (no pane)"
-    ((ISSUES++))
+    ISSUES=$((ISSUES + 1))
   fi
 done
 
@@ -75,7 +75,7 @@ if [ -d "$STATE_DIR" ]; then
         echo "OK: $AGENT_NAME (persistent, window alive)"
       else
         echo "MISSING: $AGENT_NAME (persistent, window gone)"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
 
         if [ "$FIX" = true ]; then
           AGENT_PATH=$(cat "$AGENT_DIR/directory" 2>/dev/null || echo "")
