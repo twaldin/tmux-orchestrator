@@ -6,6 +6,10 @@
     "name": "Tim Waldin",
     "email": "timothy@waldin.net"
   },
+  "commands": [
+    "./skills/orchestrate/SKILL.md",
+    "./skills/persistent/SKILL.md"
+  ],
   "homepage": "https://github.com/twaldin/tmux-orchestrator",
   "license": "MIT",
   "keywords": [
