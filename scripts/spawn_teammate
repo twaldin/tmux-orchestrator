@@ -56,6 +56,18 @@ if [ ! -d "$DIR" ]; then
   exit 1
 fi
 
+# Validate NAME — only alphanumeric, dash, underscore (prevents shell injection in env exports)
+if ! echo "$NAME" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+  echo "ERROR: Agent name '$NAME' contains invalid characters. Use only letters, numbers, hyphens, and underscores."
+  exit 1
+fi
+
+# Validate MODEL against known values (prevents injection into claude command string)
+case "$MODEL" in
+  opus|sonnet|haiku) ;;
+  *) echo "ERROR: Invalid model '$MODEL'. Supported: opus, sonnet, haiku."; exit 1 ;;
+esac
+
 # Detect current tmux session
 SESSION="${TMUX_ORCHESTRATOR_SESSION:-$(tmux display-message -p '#{session_name}' 2>/dev/null || echo '')}"
 if [ -z "$SESSION" ]; then
@@ -141,7 +153,10 @@ mkdir -p "$STATE_DIR"
 echo "$TARGET_DIR" > "$STATE_DIR/$NAME.dir"
 
 # Record orchestrator window (the one that ran this script)
-ORCH_WINDOW=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "main")
+# Use explicit ORCHESTRATOR_WINDOW if set, otherwise detect from current pane's window
+# tmux display-message returns the CLIENT's active window which may differ from the
+# window actually running this script. Use list-panes to get the real window.
+ORCH_WINDOW="${ORCHESTRATOR_WINDOW:-$(tmux display-message -p -t "${TMUX_PANE}" '#{window_name}' 2>/dev/null || echo "main")}"
 
 # Scripts path for agent
 SCRIPTS_PATH="$ORCHESTRATOR_HOME/scripts"

@@ -30,6 +30,17 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   exit 1
 fi
 
+# Verify target window exists — fall back to 'main' if the original window died
+if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^${WINDOW}$"; then
+  echo "WARNING: window '$WINDOW' no longer exists in session '$SESSION' — falling back to 'main'"
+  WINDOW="main"
+  # If 'main' doesn't exist either, use the first window
+  if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -q "^main$"; then
+    WINDOW=$(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | head -1)
+    echo "WARNING: 'main' not found either — using '$WINDOW'"
+  fi
+fi
+
 # Identify sender — use AGENT_NAME or derive from current dir
 SENDER="${AGENT_NAME:-$(basename "$PWD")}"
 SENDER_UPPER=$(echo "$SENDER" | tr '[:lower:]' '[:upper:]')
