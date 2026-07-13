@@ -1,3 +1,5 @@
+> ⚠️ **Superseded by [flt](https://github.com/twaldin/flt)** — this was an earlier iteration of the same idea; flt is the maintained successor.
+
 # tmux-orchestrator
 
 > Other tools give you an agent framework. This gives you tmux windows.
